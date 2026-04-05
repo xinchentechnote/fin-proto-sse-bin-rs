@@ -1,6 +1,31 @@
 [package]
-name = "fin-proto-sse-bin-rs"
+name = "sse-binary"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+binary-codec = { git = "ssh://git@github.com/xinchentechnote/fin-proto-runtime-rs.git" }
+byteorder = "1.5.0"
+bytes = "1.10.1"
+
+[dev-dependencies]
+anyhow = "1.0.98"
+criterion = "0.7.0"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+tokio = { version = "1.45.1", features = ["full"] }
+
+[lib]
+name = "sse_binary"
+path = "src/lib.rs"
+
+[[example]]
+name = "example"
+[[example]]
+name = "client"
+[[example]]
+name = "server"
+
+[[bench]]
+name = "new_order_bench"
+harness = false

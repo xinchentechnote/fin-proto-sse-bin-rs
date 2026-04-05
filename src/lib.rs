@@ -1,14 +1,15 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod cancel_reject;
+pub mod confirm;
+pub mod exec_rpt_end_of_stream;
+pub mod exec_rpt_info;
+pub mod exec_rpt_sync;
+pub mod exec_rpt_sync_rsp;
+pub mod heartbeat;
+pub mod logon;
+pub mod logout;
+pub mod new_order_single;
+pub mod order_cancel;
+pub mod order_reject;
+pub mod platform_state;
+pub mod report;
+pub mod sse_binary;
