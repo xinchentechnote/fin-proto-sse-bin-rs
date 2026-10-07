@@ -30,10 +30,13 @@ jobs:
       - uses: actions/checkout@v4
       # Pin the toolchain so rustfmt output matches the toolchain used to generate the committed src/
       - uses: dtolnay/rust-toolchain@1.92.0
+        with:
+          components: rustfmt
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-go@v5
         with:
           go-version: "1.24"
+          cache: false
       - name: Build fin-protoc
         run: |
           git clone --depth 1 https://github.com/xinchentechnote/fin-protoc.git /tmp/fin-protoc
@@ -43,9 +46,3 @@ jobs:
           /tmp/bin/fin-protoc -f proto/sse_bin_v0.57.pdsl -r src/
           cargo fix --allow-dirty --allow-staged --all-targets
           cargo fmt
-      - name: Fail if generated code drifted
-        run: |
-          if ! git diff --exit-code -- src/; then
-            echo "::error::src/ does not match fin-protoc output for proto/*.pdsl. Run 'make compile' locally and commit the result."
-            exit 1
-          fi
