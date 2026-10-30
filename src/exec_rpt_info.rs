@@ -2,6 +2,87 @@
 use binary_codec::*;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+#[inline]
+fn put_fixed_string_field(
+    buf: &mut BytesMut,
+    value: &str,
+    fixed_length: usize,
+    pad_byte: u8,
+    pad_left: bool,
+) {
+    let bytes = value.as_bytes();
+    let len = bytes.len().min(fixed_length);
+    let padding_len = fixed_length - len;
+    if pad_left {
+        buf.put_bytes(pad_byte, padding_len);
+    }
+    buf.extend_from_slice(&bytes[..len]);
+    if !pad_left {
+        buf.put_bytes(pad_byte, padding_len);
+    }
+}
+
+#[inline]
+fn get_fixed_string_field(
+    buf: &mut Bytes,
+    fixed_length: usize,
+    pad_byte: u8,
+    pad_left: bool,
+) -> Option<String> {
+    if buf.remaining() < fixed_length {
+        return None;
+    }
+    let bytes = buf.copy_to_bytes(fixed_length);
+    let (start, end) = if pad_left {
+        let start = bytes
+            .iter()
+            .position(|&byte| byte != pad_byte)
+            .unwrap_or(fixed_length);
+        (start, fixed_length)
+    } else {
+        let end = bytes
+            .iter()
+            .rposition(|&byte| byte != pad_byte)
+            .map_or(0, |index| index + 1);
+        (0, end)
+    };
+    String::from_utf8(bytes.slice(start..end).to_vec()).ok()
+}
+
+fn put_fixed_string_list_field<L: LengthPrefix>(
+    buf: &mut BytesMut,
+    items: &[String],
+    fixed_length: usize,
+    pad_byte: u8,
+    pad_left: bool,
+    little_endian: bool,
+) {
+    L::write(items.len(), buf, little_endian);
+    for item in items {
+        put_fixed_string_field(buf, item, fixed_length, pad_byte, pad_left);
+    }
+}
+
+fn get_fixed_string_list_field<L: LengthPrefix>(
+    buf: &mut Bytes,
+    fixed_length: usize,
+    pad_byte: u8,
+    pad_left: bool,
+    little_endian: bool,
+) -> Option<Vec<String>> {
+    let len = L::read(buf, little_endian)?;
+    let mut result = Vec::with_capacity(len);
+    for _ in 0..len {
+        result.push(get_fixed_string_field(
+            buf,
+            fixed_length,
+            pad_byte,
+            pad_left,
+        )?);
+    }
+    Some(result)
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExecRptInfo {
     pub platform_id: u16,
@@ -10,15 +91,17 @@ pub struct ExecRptInfo {
 }
 
 impl BinaryCodec for ExecRptInfo {
+    #[inline]
     fn encode(&self, buf: &mut BytesMut) {
         buf.put_u16(self.platform_id);
-        put_fixed_string_list::<u16>(buf, &self.pbu, 8);
+        put_fixed_string_list_field::<u16>(buf, &self.pbu, 8, b' ', false, false);
         put_list::<u32, u16>(buf, &self.set_id);
     }
 
+    #[inline]
     fn decode(buf: &mut Bytes) -> Option<ExecRptInfo> {
         let platform_id = buf.get_u16();
-        let pbu = get_fixed_string_list::<u16>(buf, 8)?;
+        let pbu = get_fixed_string_list_field::<u16>(buf, 8, b' ', false, false)?;
         let set_id = get_list::<u32, u16>(buf)?;
         Some(Self {
             platform_id,

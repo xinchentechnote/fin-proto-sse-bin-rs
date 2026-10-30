@@ -34,7 +34,7 @@ fn msg() -> NewOrderSingle {
         order_qty: 100,
         ord_type: "2".to_string(),
         time_in_force: "0".to_string(),
-        transact_time: 2026_0109_0930_00123,
+        transact_time: 20_260_109_093_000_123,
         credit_tag: "XY".to_string(),
         clearing_firm: "01".to_string(),
         branch_id: "0001".to_string(),

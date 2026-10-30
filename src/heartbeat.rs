@@ -6,8 +6,10 @@ use bytes::{Bytes, BytesMut};
 pub struct Heartbeat {}
 
 impl BinaryCodec for Heartbeat {
+    #[inline]
     fn encode(&self, _buf: &mut BytesMut) {}
 
+    #[inline]
     fn decode(_buf: &mut Bytes) -> Option<Heartbeat> {
         Some(Self {})
     }

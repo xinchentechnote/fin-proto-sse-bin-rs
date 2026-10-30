@@ -2,6 +2,53 @@
 use binary_codec::*;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+#[inline]
+fn put_fixed_string_field(
+    buf: &mut BytesMut,
+    value: &str,
+    fixed_length: usize,
+    pad_byte: u8,
+    pad_left: bool,
+) {
+    let bytes = value.as_bytes();
+    let len = bytes.len().min(fixed_length);
+    let padding_len = fixed_length - len;
+    if pad_left {
+        buf.put_bytes(pad_byte, padding_len);
+    }
+    buf.extend_from_slice(&bytes[..len]);
+    if !pad_left {
+        buf.put_bytes(pad_byte, padding_len);
+    }
+}
+
+#[inline]
+fn get_fixed_string_field(
+    buf: &mut Bytes,
+    fixed_length: usize,
+    pad_byte: u8,
+    pad_left: bool,
+) -> Option<String> {
+    if buf.remaining() < fixed_length {
+        return None;
+    }
+    let bytes = buf.copy_to_bytes(fixed_length);
+    let (start, end) = if pad_left {
+        let start = bytes
+            .iter()
+            .position(|&byte| byte != pad_byte)
+            .unwrap_or(fixed_length);
+        (start, fixed_length)
+    } else {
+        let end = bytes
+            .iter()
+            .rposition(|&byte| byte != pad_byte)
+            .map_or(0, |index| index + 1);
+        (0, end)
+    };
+    String::from_utf8(bytes.slice(start..end).to_vec()).ok()
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct NewOrderSingle {
     pub biz_id: u32,
@@ -23,42 +70,44 @@ pub struct NewOrderSingle {
 }
 
 impl BinaryCodec for NewOrderSingle {
+    #[inline]
     fn encode(&self, buf: &mut BytesMut) {
         buf.put_u32(self.biz_id);
-        put_char_array(buf, &self.biz_pbu, 8);
-        put_char_array(buf, &self.cl_ord_id, 10);
-        put_char_array(buf, &self.security_id, 12);
-        put_char_array(buf, &self.account, 13);
+        put_fixed_string_field(buf, &self.biz_pbu, 8, b' ', false);
+        put_fixed_string_field(buf, &self.cl_ord_id, 10, b' ', false);
+        put_fixed_string_field(buf, &self.security_id, 12, b' ', false);
+        put_fixed_string_field(buf, &self.account, 13, b' ', false);
         buf.put_u8(self.owner_type);
-        put_char_array(buf, &self.side, 1);
+        put_fixed_string_field(buf, &self.side, 1, b' ', false);
         buf.put_i64(self.price);
         buf.put_i64(self.order_qty);
-        put_char_array(buf, &self.ord_type, 1);
-        put_char_array(buf, &self.time_in_force, 1);
+        put_fixed_string_field(buf, &self.ord_type, 1, b' ', false);
+        put_fixed_string_field(buf, &self.time_in_force, 1, b' ', false);
         buf.put_u64(self.transact_time);
-        put_char_array(buf, &self.credit_tag, 2);
-        put_char_array(buf, &self.clearing_firm, 8);
-        put_char_array(buf, &self.branch_id, 8);
-        put_char_array(buf, &self.user_info, 32);
+        put_fixed_string_field(buf, &self.credit_tag, 2, b' ', false);
+        put_fixed_string_field(buf, &self.clearing_firm, 8, b' ', false);
+        put_fixed_string_field(buf, &self.branch_id, 8, b' ', false);
+        put_fixed_string_field(buf, &self.user_info, 32, b' ', false);
     }
 
+    #[inline]
     fn decode(buf: &mut Bytes) -> Option<NewOrderSingle> {
         let biz_id = buf.get_u32();
-        let biz_pbu = get_char_array(buf, 8)?;
-        let cl_ord_id = get_char_array(buf, 10)?;
-        let security_id = get_char_array(buf, 12)?;
-        let account = get_char_array(buf, 13)?;
+        let biz_pbu = get_fixed_string_field(buf, 8, b' ', false)?;
+        let cl_ord_id = get_fixed_string_field(buf, 10, b' ', false)?;
+        let security_id = get_fixed_string_field(buf, 12, b' ', false)?;
+        let account = get_fixed_string_field(buf, 13, b' ', false)?;
         let owner_type = buf.get_u8();
-        let side = get_char_array(buf, 1)?;
+        let side = get_fixed_string_field(buf, 1, b' ', false)?;
         let price = buf.get_i64();
         let order_qty = buf.get_i64();
-        let ord_type = get_char_array(buf, 1)?;
-        let time_in_force = get_char_array(buf, 1)?;
+        let ord_type = get_fixed_string_field(buf, 1, b' ', false)?;
+        let time_in_force = get_fixed_string_field(buf, 1, b' ', false)?;
         let transact_time = buf.get_u64();
-        let credit_tag = get_char_array(buf, 2)?;
-        let clearing_firm = get_char_array(buf, 8)?;
-        let branch_id = get_char_array(buf, 8)?;
-        let user_info = get_char_array(buf, 32)?;
+        let credit_tag = get_fixed_string_field(buf, 2, b' ', false)?;
+        let clearing_firm = get_fixed_string_field(buf, 8, b' ', false)?;
+        let branch_id = get_fixed_string_field(buf, 8, b' ', false)?;
+        let user_info = get_fixed_string_field(buf, 32, b' ', false)?;
         Some(Self {
             biz_id,
             biz_pbu,
@@ -89,21 +138,21 @@ mod new_order_single_tests {
     fn test_new_order_single_codec() {
         let original = NewOrderSingle {
             biz_id: 123456,
-            biz_pbu: vec!['a'; 8].into_iter().collect::<String>(),
-            cl_ord_id: vec!['a'; 10].into_iter().collect::<String>(),
-            security_id: vec!['a'; 12].into_iter().collect::<String>(),
-            account: vec!['a'; 13].into_iter().collect::<String>(),
+            biz_pbu: "a".repeat(8),
+            cl_ord_id: "a".repeat(10),
+            security_id: "a".repeat(12),
+            account: "a".repeat(13),
             owner_type: 42,
-            side: vec!['a'; 1].into_iter().collect::<String>(),
+            side: "a".to_string(),
             price: -123456789,
             order_qty: -123456789,
-            ord_type: vec!['a'; 1].into_iter().collect::<String>(),
-            time_in_force: vec!['a'; 1].into_iter().collect::<String>(),
+            ord_type: "a".to_string(),
+            time_in_force: "a".to_string(),
             transact_time: 123456789,
-            credit_tag: vec!['a'; 2].into_iter().collect::<String>(),
-            clearing_firm: vec!['a'; 8].into_iter().collect::<String>(),
-            branch_id: vec!['a'; 8].into_iter().collect::<String>(),
-            user_info: vec!['a'; 32].into_iter().collect::<String>(),
+            credit_tag: "a".repeat(2),
+            clearing_firm: "a".repeat(8),
+            branch_id: "a".repeat(8),
+            user_info: "a".repeat(32),
         };
 
         let mut buf = BytesMut::new();

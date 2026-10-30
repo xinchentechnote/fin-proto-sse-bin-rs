@@ -2,6 +2,53 @@
 use binary_codec::*;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+#[inline]
+fn put_fixed_string_field(
+    buf: &mut BytesMut,
+    value: &str,
+    fixed_length: usize,
+    pad_byte: u8,
+    pad_left: bool,
+) {
+    let bytes = value.as_bytes();
+    let len = bytes.len().min(fixed_length);
+    let padding_len = fixed_length - len;
+    if pad_left {
+        buf.put_bytes(pad_byte, padding_len);
+    }
+    buf.extend_from_slice(&bytes[..len]);
+    if !pad_left {
+        buf.put_bytes(pad_byte, padding_len);
+    }
+}
+
+#[inline]
+fn get_fixed_string_field(
+    buf: &mut Bytes,
+    fixed_length: usize,
+    pad_byte: u8,
+    pad_left: bool,
+) -> Option<String> {
+    if buf.remaining() < fixed_length {
+        return None;
+    }
+    let bytes = buf.copy_to_bytes(fixed_length);
+    let (start, end) = if pad_left {
+        let start = bytes
+            .iter()
+            .position(|&byte| byte != pad_byte)
+            .unwrap_or(fixed_length);
+        (start, fixed_length)
+    } else {
+        let end = bytes
+            .iter()
+            .rposition(|&byte| byte != pad_byte)
+            .map_or(0, |index| index + 1);
+        (0, end)
+    };
+    String::from_utf8(bytes.slice(start..end).to_vec()).ok()
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct CancelReject {
     pub pbu: String,
@@ -20,36 +67,38 @@ pub struct CancelReject {
 }
 
 impl BinaryCodec for CancelReject {
+    #[inline]
     fn encode(&self, buf: &mut BytesMut) {
-        put_char_array(buf, &self.pbu, 8);
+        put_fixed_string_field(buf, &self.pbu, 8, b' ', false);
         buf.put_u32(self.set_id);
         buf.put_u64(self.report_index);
         buf.put_u32(self.biz_id);
-        put_char_array(buf, &self.biz_pbu, 8);
-        put_char_array(buf, &self.cl_ord_id, 10);
-        put_char_array(buf, &self.security_id, 12);
-        put_char_array(buf, &self.orig_cl_ord_id, 10);
-        put_char_array(buf, &self.branch_id, 8);
+        put_fixed_string_field(buf, &self.biz_pbu, 8, b' ', false);
+        put_fixed_string_field(buf, &self.cl_ord_id, 10, b' ', false);
+        put_fixed_string_field(buf, &self.security_id, 12, b' ', false);
+        put_fixed_string_field(buf, &self.orig_cl_ord_id, 10, b' ', false);
+        put_fixed_string_field(buf, &self.branch_id, 8, b' ', false);
         buf.put_u32(self.cxl_rej_reason);
         buf.put_u32(self.trade_date);
         buf.put_u64(self.transact_time);
-        put_char_array(buf, &self.user_info, 32);
+        put_fixed_string_field(buf, &self.user_info, 32, b' ', false);
     }
 
+    #[inline]
     fn decode(buf: &mut Bytes) -> Option<CancelReject> {
-        let pbu = get_char_array(buf, 8)?;
+        let pbu = get_fixed_string_field(buf, 8, b' ', false)?;
         let set_id = buf.get_u32();
         let report_index = buf.get_u64();
         let biz_id = buf.get_u32();
-        let biz_pbu = get_char_array(buf, 8)?;
-        let cl_ord_id = get_char_array(buf, 10)?;
-        let security_id = get_char_array(buf, 12)?;
-        let orig_cl_ord_id = get_char_array(buf, 10)?;
-        let branch_id = get_char_array(buf, 8)?;
+        let biz_pbu = get_fixed_string_field(buf, 8, b' ', false)?;
+        let cl_ord_id = get_fixed_string_field(buf, 10, b' ', false)?;
+        let security_id = get_fixed_string_field(buf, 12, b' ', false)?;
+        let orig_cl_ord_id = get_fixed_string_field(buf, 10, b' ', false)?;
+        let branch_id = get_fixed_string_field(buf, 8, b' ', false)?;
         let cxl_rej_reason = buf.get_u32();
         let trade_date = buf.get_u32();
         let transact_time = buf.get_u64();
-        let user_info = get_char_array(buf, 32)?;
+        let user_info = get_fixed_string_field(buf, 32, b' ', false)?;
         Some(Self {
             pbu,
             set_id,
@@ -76,19 +125,19 @@ mod cancel_reject_tests {
     #[test]
     fn test_cancel_reject_codec() {
         let original = CancelReject {
-            pbu: vec!['a'; 8].into_iter().collect::<String>(),
+            pbu: "a".repeat(8),
             set_id: 123456,
             report_index: 123456789,
             biz_id: 123456,
-            biz_pbu: vec!['a'; 8].into_iter().collect::<String>(),
-            cl_ord_id: vec!['a'; 10].into_iter().collect::<String>(),
-            security_id: vec!['a'; 12].into_iter().collect::<String>(),
-            orig_cl_ord_id: vec!['a'; 10].into_iter().collect::<String>(),
-            branch_id: vec!['a'; 8].into_iter().collect::<String>(),
+            biz_pbu: "a".repeat(8),
+            cl_ord_id: "a".repeat(10),
+            security_id: "a".repeat(12),
+            orig_cl_ord_id: "a".repeat(10),
+            branch_id: "a".repeat(8),
             cxl_rej_reason: 123456,
             trade_date: 123456,
             transact_time: 123456789,
-            user_info: vec!['a'; 32].into_iter().collect::<String>(),
+            user_info: "a".repeat(32),
         };
 
         let mut buf = BytesMut::new();

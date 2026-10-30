@@ -29,3 +29,11 @@ name = "server"
 [[bench]]
 name = "new_order_bench"
 harness = false
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+
+[profile.bench]
+lto = "fat"
+codegen-units = 1

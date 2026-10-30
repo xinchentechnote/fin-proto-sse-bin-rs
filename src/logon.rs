@@ -2,6 +2,53 @@
 use binary_codec::*;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+#[inline]
+fn put_fixed_string_field(
+    buf: &mut BytesMut,
+    value: &str,
+    fixed_length: usize,
+    pad_byte: u8,
+    pad_left: bool,
+) {
+    let bytes = value.as_bytes();
+    let len = bytes.len().min(fixed_length);
+    let padding_len = fixed_length - len;
+    if pad_left {
+        buf.put_bytes(pad_byte, padding_len);
+    }
+    buf.extend_from_slice(&bytes[..len]);
+    if !pad_left {
+        buf.put_bytes(pad_byte, padding_len);
+    }
+}
+
+#[inline]
+fn get_fixed_string_field(
+    buf: &mut Bytes,
+    fixed_length: usize,
+    pad_byte: u8,
+    pad_left: bool,
+) -> Option<String> {
+    if buf.remaining() < fixed_length {
+        return None;
+    }
+    let bytes = buf.copy_to_bytes(fixed_length);
+    let (start, end) = if pad_left {
+        let start = bytes
+            .iter()
+            .position(|&byte| byte != pad_byte)
+            .unwrap_or(fixed_length);
+        (start, fixed_length)
+    } else {
+        let end = bytes
+            .iter()
+            .rposition(|&byte| byte != pad_byte)
+            .map_or(0, |index| index + 1);
+        (0, end)
+    };
+    String::from_utf8(bytes.slice(start..end).to_vec()).ok()
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Logon {
     pub sender_comp_id: String,
@@ -13,20 +60,22 @@ pub struct Logon {
 }
 
 impl BinaryCodec for Logon {
+    #[inline]
     fn encode(&self, buf: &mut BytesMut) {
-        put_char_array(buf, &self.sender_comp_id, 32);
-        put_char_array(buf, &self.target_comp_id, 32);
+        put_fixed_string_field(buf, &self.sender_comp_id, 32, b' ', false);
+        put_fixed_string_field(buf, &self.target_comp_id, 32, b' ', false);
         buf.put_u16(self.heart_bt_int);
-        put_char_array(buf, &self.prtcl_version, 8);
+        put_fixed_string_field(buf, &self.prtcl_version, 8, b' ', false);
         buf.put_u32(self.trade_date);
         buf.put_u32(self.q_size);
     }
 
+    #[inline]
     fn decode(buf: &mut Bytes) -> Option<Logon> {
-        let sender_comp_id = get_char_array(buf, 32)?;
-        let target_comp_id = get_char_array(buf, 32)?;
+        let sender_comp_id = get_fixed_string_field(buf, 32, b' ', false)?;
+        let target_comp_id = get_fixed_string_field(buf, 32, b' ', false)?;
         let heart_bt_int = buf.get_u16();
-        let prtcl_version = get_char_array(buf, 8)?;
+        let prtcl_version = get_fixed_string_field(buf, 8, b' ', false)?;
         let trade_date = buf.get_u32();
         let q_size = buf.get_u32();
         Some(Self {
@@ -48,10 +97,10 @@ mod logon_tests {
     #[test]
     fn test_logon_codec() {
         let original = Logon {
-            sender_comp_id: vec!['a'; 32].into_iter().collect::<String>(),
-            target_comp_id: vec!['a'; 32].into_iter().collect::<String>(),
+            sender_comp_id: "a".repeat(32),
+            target_comp_id: "a".repeat(32),
             heart_bt_int: 1234,
-            prtcl_version: vec!['a'; 8].into_iter().collect::<String>(),
+            prtcl_version: "a".repeat(8),
             trade_date: 123456,
             q_size: 123456,
         };

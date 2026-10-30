@@ -46,6 +46,7 @@ pub struct SseBinary {
 }
 
 impl BinaryCodec for SseBinary {
+    #[inline]
     fn encode(&self, buf: &mut BytesMut) {
         buf.put_u32(self.msg_type);
         buf.put_u64(self.msg_seq_num);
@@ -85,6 +86,7 @@ impl BinaryCodec for SseBinary {
         buf.put_u32(val);
     }
 
+    #[inline]
     fn decode(buf: &mut Bytes) -> Option<SseBinary> {
         let msg_type = buf.get_u32();
         let msg_seq_num = buf.get_u64();

@@ -2,6 +2,53 @@
 use binary_codec::*;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+#[inline]
+fn put_fixed_string_field(
+    buf: &mut BytesMut,
+    value: &str,
+    fixed_length: usize,
+    pad_byte: u8,
+    pad_left: bool,
+) {
+    let bytes = value.as_bytes();
+    let len = bytes.len().min(fixed_length);
+    let padding_len = fixed_length - len;
+    if pad_left {
+        buf.put_bytes(pad_byte, padding_len);
+    }
+    buf.extend_from_slice(&bytes[..len]);
+    if !pad_left {
+        buf.put_bytes(pad_byte, padding_len);
+    }
+}
+
+#[inline]
+fn get_fixed_string_field(
+    buf: &mut Bytes,
+    fixed_length: usize,
+    pad_byte: u8,
+    pad_left: bool,
+) -> Option<String> {
+    if buf.remaining() < fixed_length {
+        return None;
+    }
+    let bytes = buf.copy_to_bytes(fixed_length);
+    let (start, end) = if pad_left {
+        let start = bytes
+            .iter()
+            .position(|&byte| byte != pad_byte)
+            .unwrap_or(fixed_length);
+        (start, fixed_length)
+    } else {
+        let end = bytes
+            .iter()
+            .rposition(|&byte| byte != pad_byte)
+            .map_or(0, |index| index + 1);
+        (0, end)
+    };
+    String::from_utf8(bytes.slice(start..end).to_vec()).ok()
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SubExecRptSyncRsp {
     pub pbu: String,
@@ -13,22 +60,24 @@ pub struct SubExecRptSyncRsp {
 }
 
 impl BinaryCodec for SubExecRptSyncRsp {
+    #[inline]
     fn encode(&self, buf: &mut BytesMut) {
-        put_char_array(buf, &self.pbu, 8);
+        put_fixed_string_field(buf, &self.pbu, 8, b' ', false);
         buf.put_u32(self.set_id);
         buf.put_u64(self.begin_report_index);
         buf.put_u64(self.end_report_index);
         buf.put_u32(self.rej_reason);
-        put_char_array(buf, &self.text, 64);
+        put_fixed_string_field(buf, &self.text, 64, b' ', false);
     }
 
+    #[inline]
     fn decode(buf: &mut Bytes) -> Option<SubExecRptSyncRsp> {
-        let pbu = get_char_array(buf, 8)?;
+        let pbu = get_fixed_string_field(buf, 8, b' ', false)?;
         let set_id = buf.get_u32();
         let begin_report_index = buf.get_u64();
         let end_report_index = buf.get_u64();
         let rej_reason = buf.get_u32();
-        let text = get_char_array(buf, 64)?;
+        let text = get_fixed_string_field(buf, 64, b' ', false)?;
         Some(Self {
             pbu,
             set_id,
@@ -48,12 +97,12 @@ mod sub_exec_rpt_sync_rsp_tests {
     #[test]
     fn test_sub_exec_rpt_sync_rsp_codec() {
         let original = SubExecRptSyncRsp {
-            pbu: vec!['a'; 8].into_iter().collect::<String>(),
+            pbu: "a".repeat(8),
             set_id: 123456,
             begin_report_index: 123456789,
             end_report_index: 123456789,
             rej_reason: 123456,
-            text: vec!['a'; 64].into_iter().collect::<String>(),
+            text: "a".repeat(64),
         };
 
         let mut buf = BytesMut::new();
@@ -71,10 +120,12 @@ pub struct ExecRptSyncRsp {
 }
 
 impl BinaryCodec for ExecRptSyncRsp {
+    #[inline]
     fn encode(&self, buf: &mut BytesMut) {
         put_object_list::<SubExecRptSyncRsp, u16>(buf, &self.sub_exec_rpt_sync_rsp);
     }
 
+    #[inline]
     fn decode(buf: &mut Bytes) -> Option<ExecRptSyncRsp> {
         let sub_exec_rpt_sync_rsp = get_object_list::<SubExecRptSyncRsp, u16>(buf)?;
         Some(Self {
