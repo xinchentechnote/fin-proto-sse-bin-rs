@@ -1,3 +1,4 @@
+pub mod borrowed_reader;
 pub mod cancel_reject;
 pub mod confirm;
 pub mod exec_rpt_end_of_stream;

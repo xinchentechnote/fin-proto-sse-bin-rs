@@ -122,6 +122,20 @@ impl BinaryCodec for SseBinary {
 #[cfg(test)]
 mod sse_binary_tests {
     use super::*;
+    use crate::cancel_reject::*;
+    use crate::confirm::*;
+    use crate::exec_rpt_end_of_stream::*;
+    use crate::exec_rpt_info::*;
+    use crate::exec_rpt_sync::*;
+    use crate::exec_rpt_sync_rsp::*;
+    use crate::heartbeat::*;
+    use crate::logon::*;
+    use crate::logout::*;
+    use crate::new_order_single::*;
+    use crate::order_cancel::*;
+    use crate::order_reject::*;
+    use crate::platform_state::*;
+    use crate::report::*;
     use bytes::BytesMut;
 
     #[test]

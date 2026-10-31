@@ -13,7 +13,7 @@ use std::time::Instant;
 
 use binary_codec::BinaryCodec;
 use bytes::{Bytes, BytesMut};
-use sse_binary::new_order_single::NewOrderSingle;
+use sse_binary::new_order_single::{NewOrderSingle, NewOrderSingleRef};
 
 const LIB: &str = "sse";
 const LANG: &str = "rust";
@@ -88,6 +88,53 @@ fn main() {
     }
     println!(
         "{}\t{}\tdecode\t{:.1}\t{}",
+        LIB,
+        LANG,
+        best as f64 / ITERS as f64,
+        raw.len()
+    );
+
+    // --- owned decode with reused String capacity --------------------------
+    let mut reused = msg.clone();
+    for _ in 0..WARMUP {
+        let mut b = Bytes::from_static(raw);
+        NewOrderSingle::decode_into(&mut b, &mut reused).unwrap();
+        black_box(&reused);
+    }
+    let mut best: u128 = u128::MAX;
+    for _ in 0..BATCHES {
+        let start = Instant::now();
+        for _ in 0..ITERS {
+            let mut b = Bytes::from_static(raw);
+            NewOrderSingle::decode_into(&mut b, &mut reused).unwrap();
+            black_box(&reused);
+        }
+        best = best.min(start.elapsed().as_nanos());
+    }
+    println!(
+        "{}\t{}\tdecode_reuse\t{:.1}\t{}",
+        LIB,
+        LANG,
+        best as f64 / ITERS as f64,
+        raw.len()
+    );
+
+    // --- zero-copy borrowed decode -----------------------------------------
+    for _ in 0..WARMUP {
+        let m = NewOrderSingleRef::from_slice(raw).unwrap();
+        black_box(m);
+    }
+    let mut best: u128 = u128::MAX;
+    for _ in 0..BATCHES {
+        let start = Instant::now();
+        for _ in 0..ITERS {
+            let m = NewOrderSingleRef::from_slice(raw).unwrap();
+            black_box(m);
+        }
+        best = best.min(start.elapsed().as_nanos());
+    }
+    println!(
+        "{}\t{}\tdecode_borrowed\t{:.1}\t{}",
         LIB,
         LANG,
         best as f64 / ITERS as f64,
